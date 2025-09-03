@@ -8,6 +8,8 @@ app.post('/bookings', auth, async (req, res) => {
     capture_method: 'manual',
     automatic_payment_methods: { enabled: true },
     metadata: { serviceId, groomerId }
+    payment_method: 'pm_card_visa',
+    confirm: true
   });
   const booking = await prisma.booking.create({
     data: {
