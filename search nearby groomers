@@ -1,0 +1,22 @@
+// GET /groomers?lat=&lng=&radiusKm=
+app.get('/groomers', async (req, res) => {
+  const { lat, lng, radiusKm = 25 } = req.query;
+  // rough filter by bounding box, refine by haversine on server or in SQL
+  const groomers = await prisma.$queryRaw`
+    SELECT g.*, u.name,
+      ( 6371 * acos(
+        cos(radians(${lat})) * cos(radians(g."homeLat")) *
+        cos(radians(g."homeLng") - radians(${lng})) +
+        sin(radians(${lat})) * sin(radians(g."homeLat"))
+      )) AS distance_km
+    FROM "Groomer" g
+    JOIN "User" u ON u.id = g."userId"
+    HAVING (6371 * acos(
+      cos(radians(${lat})) * cos(radians(g."homeLat")) *
+      cos(radians(g."homeLng") - radians(${lng})) +
+      sin(radians(${lat})) * sin(radians(g."homeLat"))
+    )) <= ${Number(radiusKm)}
+    ORDER BY distance_km ASC
+  `;
+  res.json(groomers);
+});
