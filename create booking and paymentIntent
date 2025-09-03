@@ -1,0 +1,25 @@
+app.post('/bookings', auth, async (req, res) => {
+  const { groomerId, serviceId, startTs, address, lat, lng } = req.body;
+  const service = await prisma.service.findUnique({ where: { id: serviceId }});
+  // Create a Stripe PaymentIntent (capture later or on accept)
+  const pi = await stripe.paymentIntents.create({
+    amount: service.priceCents,
+    currency: 'usd',
+    capture_method: 'manual',
+    automatic_payment_methods: { enabled: true },
+    metadata: { serviceId, groomerId }
+  });
+  const booking = await prisma.booking.create({
+    data: {
+      customerId: req.user.id,
+      groomerId,
+      serviceId,
+      startTs: new Date(startTs),
+      endTs: new Date(new Date(startTs).getTime() + service.durationMin*60000),
+      address, lat, lng,
+      priceCents: service.priceCents,
+      stripePaymentIntentId: pi.id
+    }
+  });
+  res.json({ bookingId: booking.id, clientSecret: pi.client_secret });
+});
