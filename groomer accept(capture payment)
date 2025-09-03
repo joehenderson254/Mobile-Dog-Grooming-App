@@ -1,0 +1,6 @@
+app.post('/bookings/:id/confirm', authGroomer, async (req, res) => {
+  const booking = await prisma.booking.findUnique({ where: { id: req.params.id }});
+  await stripe.paymentIntents.capture(booking.stripePaymentIntentId);
+  await prisma.booking.update({ where:{ id: booking.id }, data:{ status: 'accepted' }});
+  res.json({ ok: true });
+});
