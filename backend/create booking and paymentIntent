@@ -1,27 +1,45 @@
-app.post('/bookings', auth, async (req, res) => {
-  const { groomerId, serviceId, startTs, address, lat, lng } = req.body;
-  const service = await prisma.service.findUnique({ where: { id: serviceId }});
-  // Create a Stripe PaymentIntent (capture later or on accept)
-  const pi = await stripe.paymentIntents.create({
-    amount: service.priceCents,
-    currency: 'usd',
-    capture_method: 'manual',
-    automatic_payment_methods: { enabled: true },
-    metadata: { serviceId, groomerId }
-    payment_method: 'pm_card_visa',
-    confirm: true
-  });
-  const booking = await prisma.booking.create({
-    data: {
-      customerId: req.user.id,
-      groomerId,
-      serviceId,
-      startTs: new Date(startTs),
-      endTs: new Date(new Date(startTs).getTime() + service.durationMin*60000),
-      address, lat, lng,
-      priceCents: service.priceCents,
-      stripePaymentIntentId: pi.id
-    }
-  });
-  res.json({ bookingId: booking.id, clientSecret: pi.client_secret });
+// POST /bookings  (create booking + PaymentIntent)
+router.post('/', async (req, res) => {
+  try {
+    const { customerId, groomerId, serviceId, startTs, address, lat, lng } = req.body;
+
+    const service = await prisma.service.findUnique({ where: { id: serviceId }});
+    if (!service) return res.status(400).json({ error: 'Service not found' });
+
+    // Create PaymentIntent (manual capture, explicit test card for dev)
+    const pi = await stripe.paymentIntents.create({
+      amount: service.priceCents,   // in cents
+      currency: 'usd',
+      capture_method: 'manual',
+
+      // ✅ Explicit test config
+      payment_method_types: ['card'],
+      payment_method: 'pm_card_visa',
+      confirm: true
+    });
+
+    const start = new Date(startTs);
+    const end = new Date(start.getTime() + service.durationMin * 60000);
+
+    const booking = await prisma.booking.create({
+      data: {
+        customerId,
+        groomerId,
+        serviceId,
+        startTs: start,
+        endTs: end,
+        address,
+        lat,
+        lng,
+        priceCents: service.priceCents,
+        stripePaymentIntentId: pi.id
+      }
+    });
+
+    return res.json({ bookingId: booking.id, clientSecret: pi.client_secret });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
+
